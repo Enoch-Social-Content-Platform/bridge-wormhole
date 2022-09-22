@@ -2,11 +2,14 @@ import './App.css';
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import {
-  getEmitterAddressEth,
-  parseSequenceFromLogEth,
-  attestFromEth,
-  tryNativeToHexString,
+  attestFromSolana,
+  createWrappedOnEth,
+  parseSequenceFromLogSolana,
+  getSignedVAA,
+  getEmitterAddressSolana
 } from "@certusone/wormhole-sdk";
+
+import { Connection} from "@solana/web3.js"
 
 function App() {
 
@@ -18,6 +21,44 @@ function App() {
   const [r_sig, setr_sig] = useState("");
   const [s_sig, sets_sig] = useState("");
   const [v, setv] = useState(0);
+
+  const SOLANA_HOST = "http://solana-devnet:8899";
+  const SOL_BRIDGE_ADDRESS = "3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5";
+  const SOL_TOKEN_BRIDGE_ADDRESS = "DZnkkTmCiFWfYTfT41X3Rd1kDgozqzxWaHqsw6W4x2oe";
+  const connection = new Connection(SOLANA_HOST, "confirmed") ;
+  const payerAddress = "0x259989150c6302D5A7AeEc4DA49ABfe1464C58fE";
+  const mintAddress = "";
+  const WORMHOLE_RPC_HOST = "https://wormhole-v2-testnet-api.certus.one";
+  const CHAIN_ID_SOLANA = 1;
+  const ETH_TOKEN_BRIDGE_ADDRESS = "0xF890982f9310df57d00f659cf4fd87e65adEd8d7";
+
+  const solanaToETH = async () => {
+    const transaction = await attestFromSolana(
+      connection,
+      SOL_BRIDGE_ADDRESS,
+      SOL_TOKEN_BRIDGE_ADDRESS,
+      payerAddress,
+      mintAddress
+    );
+
+    const signed = await wallet.signTransaction(transaction);
+    const txid = await connection.sendRawTransaction(signed.serialize());
+    await connection.confirmTransaction(txid);
+    
+    const info = await connection.getTransaction(txid);
+    const sequence = parseSequenceFromLogSolana(info);
+    const emitterAddress = await getEmitterAddressSolana(SOL_TOKEN_BRIDGE_ADDRESS);
+    
+    const { signedVAA } = await getSignedVAA(
+    WORMHOLE_RPC_HOST,
+    CHAIN_ID_SOLANA,
+    emitterAddress,
+    sequence
+    );
+    // Create the wrapped token on Ethereum
+    await createWrappedOnEth(ETH_TOKEN_BRIDGE_ADDRESS, signer, signedVAA);
+
+  }
 
   async function requestAccount() {
 
@@ -172,6 +213,8 @@ function App() {
 
         <button onClick={connectWallet}>Connect Wallet</button>
         <h3>Wallet Address: {wallet}</h3>
+
+        <button onClick={solanaToETH}>Attest From Solana</button>
 
       </header>
 
